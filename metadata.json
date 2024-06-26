@@ -1,0 +1,8 @@
+{
+  "name": "\"Noise\"",
+  "description": "\"Displays currently playing song info\"",
+  "uuid": "noise@filk.icloud.com",
+  "shell-version": [
+    "42"
+  ]
+}
