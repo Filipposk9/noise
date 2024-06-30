@@ -20,7 +20,7 @@
 
 const GETTEXT_DOMAIN = "my-indicator-extension";
 
-const { GObject, St } = imports.gi;
+const { GObject, St, Gio } = imports.gi;
 
 const ExtensionUtils = imports.misc.extensionUtils;
 const Main = imports.ui.main;
@@ -34,7 +34,9 @@ const Lang = imports.lang;
 const Clutter = imports.gi.Clutter;
 
 //TODO: dont take space when player is closed
-//TODO: onClick show media player controls
+//TODO: add settings to show/hide all the above & position elements
+//TODO: play/pause icon switch
+//TODO: detect multiple open players
 //TODO: switch to typescript
 
 const Indicator = GObject.registerClass(
@@ -44,20 +46,98 @@ const Indicator = GObject.registerClass(
 
       this._label = new St.Label({
         text: _("Now Playing"),
-        // style_class: "main-text",
         y_align: Clutter.ActorAlign.CENTER,
         y_expand: true,
       });
 
       this.add_child(this._label);
 
-      // let item = new PopupMenu.PopupMenuItem(_("Show Notification"));
-      // item.connect("activate", () => {
-      //   Main.notify(_("Whatʼs up, folks?"));
-      // });
-      // this.menu.addMenuItem(item);
+      this._createIconBox();
 
       this._updateSong();
+    }
+
+    _createIconBox() {
+      this._albumArtBox = new St.BoxLayout({
+        style_class: "album-art-boxlayout",
+        x_expand: true,
+        y_expand: true,
+        x_align: Clutter.ActorAlign.CENTER,
+        y_align: Clutter.ActorAlign.CENTER,
+      });
+
+      this._albumArtIcon = new St.Icon({
+        icon_size: 130,
+        style_class: "album-art-icon",
+        x_expand: true,
+        y_expand: true,
+      });
+
+      this._albumArtBox.add_child(this._albumArtIcon);
+
+      this._iconBox = new St.BoxLayout({
+        style_class: "media-control-boxlayout",
+        x_expand: true,
+        y_expand: true,
+        x_align: Clutter.ActorAlign.CENTER,
+        y_align: Clutter.ActorAlign.END,
+      });
+
+      this._previousIcon = new St.Icon({
+        icon_name: "media-skip-backward-symbolic",
+        icon_size: 32,
+        style_class: "icon",
+      });
+      let previousButton = new St.Button({
+        child: this._previousIcon,
+        style_class: "media-control-button",
+      });
+      previousButton.connect("clicked", () => {
+        GLib.spawn_command_line_async(
+          "dbus-send --print-reply --dest=org.mpris.MediaPlayer2.cider /org/mpris/MediaPlayer2 org.mpris.MediaPlayer2.Player.Previous"
+        );
+      });
+      this._iconBox.add_child(previousButton);
+
+      this._playPauseIcon = new St.Icon({
+        icon_name: "media-playback-start-symbolic",
+        icon_size: 32,
+        style_class: "icon",
+      });
+      let playPauseButton = new St.Button({
+        child: this._playPauseIcon,
+        style_class: "media-control-button",
+      });
+      playPauseButton.connect("clicked", () => {
+        GLib.spawn_command_line_async(
+          "dbus-send --print-reply --dest=org.mpris.MediaPlayer2.cider /org/mpris/MediaPlayer2 org.mpris.MediaPlayer2.Player.PlayPause"
+        );
+      });
+      this._iconBox.add_child(playPauseButton);
+
+      this._nextIcon = new St.Icon({
+        icon_name: "media-skip-forward-symbolic",
+        icon_size: 32,
+        style_class: "icon",
+      });
+      let nextButton = new St.Button({
+        child: this._nextIcon,
+        style_class: "media-control-button",
+      });
+      nextButton.connect("clicked", () => {
+        GLib.spawn_command_line_async(
+          "dbus-send --print-reply --dest=org.mpris.MediaPlayer2.cider /org/mpris/MediaPlayer2 org.mpris.MediaPlayer2.Player.Next"
+        );
+      });
+      this._iconBox.add_child(nextButton);
+
+      this.menu.box.style_class = "media-control-box";
+      this.menu.box.x_expand = true;
+      this.menu.box.y_expand = true;
+      this.menu.box.vertical = true;
+
+      this.menu.box.add(this._albumArtBox);
+      this.menu.box.add(this._iconBox);
     }
 
     _updateSong() {
@@ -80,17 +160,23 @@ const Indicator = GObject.registerClass(
         /string\s+"xesam:title"\s+variant\s+string\s+"([^"]+)"/
       );
 
-      if (artistMatch && titleMatch) {
+      let albumArtMatch = output.match(
+        /string\s+"mpris:artUrl"\s+variant\s+string\s+"(https[^"]+)"/
+      );
+
+      if (artistMatch && titleMatch && albumArtMatch) {
         let artist = artistMatch[1];
         let title = titleMatch[1];
         this._label.text = _(`${artist} - ${title}`);
+
+        this._albumArtIcon.gicon = Gio.icon_new_for_string(albumArtMatch[1]);
       } else {
         this._label.text = _("Now Playing");
       }
 
       GLib.timeout_add_seconds(
         GLib.PRIORITY_DEFAULT,
-        5,
+        3,
         Lang.bind(this, this._updateSong)
       );
     }
@@ -106,7 +192,7 @@ class Extension {
 
   enable() {
     this._indicator = new Indicator();
-    Main.panel.addToStatusArea(this._uuid, this._indicator);
+    Main.panel.addToStatusArea(this._uuid, this._indicator, 0, "left");
   }
 
   disable() {
