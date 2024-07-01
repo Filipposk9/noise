@@ -42,15 +42,20 @@ const Clutter = imports.gi.Clutter;
 const Indicator = GObject.registerClass(
   class Indicator extends PanelMenu.Button {
     _init() {
-      super._init(0.0, _("My Shiny Indicator"));
+      super._init(1.0, "My Shiny Indicator", false);
 
       this._label = new St.Label({
         text: _("Now Playing"),
+        x_align: Clutter.ActorAlign.START,
         y_align: Clutter.ActorAlign.CENTER,
         y_expand: true,
       });
 
       this.add_child(this._label);
+
+      // if (Main.panel._menus === undefined)
+      //   Main.panel.menuManager.addMenu(this.menu);
+      // else Main.panel._menus.addMenu(this.menu);
 
       this._createIconBox();
 
@@ -67,7 +72,7 @@ const Indicator = GObject.registerClass(
       });
 
       this._albumArtIcon = new St.Icon({
-        icon_size: 130,
+        icon_size: 160,
         style_class: "album-art-icon",
         x_expand: true,
         y_expand: true,
@@ -132,7 +137,11 @@ const Indicator = GObject.registerClass(
       this._iconBox.add_child(nextButton);
 
       this.menu.box.style_class = "media-control-box";
+      this.menu.box.set_width(
+        this._label.get_width() + 20 < 200 ? 200 : this._label.get_width() + 20
+      );
       this.menu.box.x_expand = true;
+      this.menu.box.x_align = St.Align.START;
       this.menu.box.y_expand = true;
       this.menu.box.vertical = true;
 
@@ -169,10 +178,16 @@ const Indicator = GObject.registerClass(
         let title = titleMatch[1];
         this._label.text = _(`${artist} - ${title}`);
 
-        this._albumArtIcon.gicon = Gio.icon_new_for_string(albumArtMatch[1]);
+        if (this._albumArtIcon !== undefined) {
+          this._albumArtIcon.gicon = Gio.icon_new_for_string(albumArtMatch[1]);
+        }
       } else {
         this._label.text = _("Now Playing");
       }
+
+      this.menu.box.set_width(
+        this._label.get_width() + 20 < 200 ? 200 : this._label.get_width() + 20
+      );
 
       GLib.timeout_add_seconds(
         GLib.PRIORITY_DEFAULT,
