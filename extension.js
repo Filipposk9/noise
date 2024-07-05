@@ -18,7 +18,8 @@
 
 /* exported init */
 
-const GETTEXT_DOMAIN = "my-indicator-extension";
+// const GETTEXT_DOMAIN = "Noise";
+const GETTEXT_DOMAIN = imports.gettext.domain(Me.metadata["gettext-domain"]);
 
 const { GObject, St, Gio } = imports.gi;
 
@@ -35,14 +36,17 @@ const Clutter = imports.gi.Clutter;
 
 //TODO: dont take space when player is closed
 //TODO: add settings to show/hide all the above & position elements
-//TODO: play/pause icon switch
 //TODO: detect multiple open players
 //TODO: switch to typescript
 
 const Indicator = GObject.registerClass(
   class Indicator extends PanelMenu.Button {
+    _isPlaying = false;
+    _servicePath = "";
+    _objectPath = "";
+
     _init() {
-      super._init(1.0, "My Shiny Indicator", false);
+      super._init(1.0, "Noise", false);
 
       this._label = new St.Label({
         text: _("Now Playing"),
@@ -104,8 +108,20 @@ const Indicator = GObject.registerClass(
       });
       this._iconBox.add_child(previousButton);
 
+      //detect if currently playing
+
+      let [success, out, err, status] = GLib.spawn_command_line_sync(
+        "dbus-send --print-reply --dest=org.mpris.MediaPlayer2.cider /org/mpris/MediaPlayer2 org.freedesktop.DBus.Properties.Get string:org.mpris.MediaPlayer2.Player string:PlaybackStatus"
+      );
+
+      let output = out.toString();
+
+      this._isPlaying = output.match(/"Playing"/);
+
       this._playPauseIcon = new St.Icon({
-        icon_name: "media-playback-start-symbolic",
+        icon_name: this._isPlaying
+          ? "media-playback-pause-symbolic"
+          : "media-playback-start-symbolic",
         icon_size: 32,
         style_class: "icon",
       });
@@ -117,6 +133,18 @@ const Indicator = GObject.registerClass(
         GLib.spawn_command_line_async(
           "dbus-send --print-reply --dest=org.mpris.MediaPlayer2.cider /org/mpris/MediaPlayer2 org.mpris.MediaPlayer2.Player.PlayPause"
         );
+
+        this._isPlaying = !this._isPlaying;
+
+        if (this._isPlaying) {
+          this._playPauseIcon.gicon = Gio.icon_new_for_string(
+            "media-playback-pause-symbolic"
+          );
+        } else {
+          this._playPauseIcon.gicon = Gio.icon_new_for_string(
+            "media-playback-start-symbolic"
+          );
+        }
       });
       this._iconBox.add_child(playPauseButton);
 
@@ -138,7 +166,7 @@ const Indicator = GObject.registerClass(
 
       this.menu.box.style_class = "media-control-box";
       this.menu.box.set_width(
-        this._label.get_width() + 20 < 200 ? 200 : this._label.get_width() + 20
+        this._label.get_width() < 180 ? 200 : this._label.get_width() + 20
       );
       this.menu.box.x_expand = true;
       this.menu.box.x_align = St.Align.START;
@@ -181,12 +209,14 @@ const Indicator = GObject.registerClass(
         if (this._albumArtIcon !== undefined) {
           this._albumArtIcon.gicon = Gio.icon_new_for_string(albumArtMatch[1]);
         }
+
+        this._isPlaying = true;
       } else {
         this._label.text = _("Now Playing");
       }
 
       this.menu.box.set_width(
-        this._label.get_width() + 20 < 200 ? 200 : this._label.get_width() + 20
+        this._label.get_width() < 180 ? 200 : this._label.get_width() + 20
       );
 
       GLib.timeout_add_seconds(
