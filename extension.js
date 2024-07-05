@@ -63,7 +63,7 @@ const Indicator = GObject.registerClass(
 
       this.add_child(this._label);
 
-      this._createIconBox();
+      this._buildMiniPlayer();
       this._updateSong();
     }
 
@@ -94,12 +94,12 @@ const Indicator = GObject.registerClass(
 
       if (playerState === "Playing") {
         return true;
-      } else {
-        return false;
       }
+
+      return false;
     }
 
-    _createIconBox() {
+    _buildAlbumArtBox() {
       this._albumArtBox = new St.BoxLayout({
         style_class: "album-art-boxlayout",
         x_expand: true,
@@ -116,95 +116,90 @@ const Indicator = GObject.registerClass(
       });
 
       this._albumArtBox.add_child(this._albumArtIcon);
+      this.menu.box.add(this._albumArtBox);
+    }
 
+    _buildIconButton(iconName, action) {
+      const icon = new St.Icon({
+        icon_name: iconName,
+        icon_size: 32,
+        style_class: "icon",
+        reactive: true,
+        track_hover: true,
+      });
+
+      const button = new St.Button({
+        child: icon,
+        style_class: "media-control-button",
+      });
+
+      button.connect("clicked", action);
+
+      return button;
+    }
+
+    _buildMediaControlBox() {
       this._iconBox = new St.BoxLayout({
-        style_class: "media-control-boxlayout",
+        style_class: "media-control-box",
         x_expand: true,
         y_expand: true,
         x_align: Clutter.ActorAlign.CENTER,
         y_align: Clutter.ActorAlign.END,
       });
 
-      this._previousIcon = new St.Icon({
-        icon_name: "media-skip-backward-symbolic",
-        icon_size: 32,
-        style_class: "icon",
-        reactive: true,
-        track_hover: true,
-      });
-      let previousButton = new St.Button({
-        child: this._previousIcon,
-        style_class: "media-control-button",
-      });
-      previousButton.connect("clicked", () => {
-        GLib.spawn_command_line_async(
-          `dbus-send --print-reply --dest=${this._servicePath} /org/mpris/MediaPlayer2 org.mpris.MediaPlayer2.Player.Previous`
-        );
-      });
-
-      this._previousIconBox = new St.BoxLayout({
-        style_class: "icon-box",
-        x_expand: true,
-        y_expand: true,
-        reactive: true,
-        track_hover: true,
-      });
-
-      this._iconBox.add_child(previousButton);
-
-      this._playPauseIcon = new St.Icon({
-        icon_name: this._isPlaying
-          ? "media-playback-pause-symbolic"
-          : "media-playback-start-symbolic",
-        icon_size: 32,
-        style_class: "icon",
-        reactive: true,
-        track_hover: true,
-      });
-      let playPauseButton = new St.Button({
-        child: this._playPauseIcon,
-        style_class: "media-control-button",
-      });
-      playPauseButton.connect("clicked", () => {
-        GLib.spawn_command_line_async(
-          `dbus-send --print-reply --dest=${this._servicePath} /org/mpris/MediaPlayer2 org.mpris.MediaPlayer2.Player.PlayPause`
-        );
-
-        this._isPlaying = !this._isPlaying;
-
-        if (this._isPlaying) {
-          this._playPauseIcon.gicon = Gio.icon_new_for_string(
-            "media-playback-pause-symbolic"
-          );
-        } else {
-          this._playPauseIcon.gicon = Gio.icon_new_for_string(
-            "media-playback-start-symbolic"
+      const previousButton = this._buildIconButton(
+        "media-skip-backward-symbolic",
+        () => {
+          GLib.spawn_command_line_async(
+            `dbus-send --print-reply --dest=${this._servicePath} /org/mpris/MediaPlayer2 org.mpris.MediaPlayer2.Player.Previous`
           );
         }
-      });
+      );
+      this._iconBox.add_child(previousButton);
+
+      const playPauseButton = this._buildIconButton(
+        this._isPlaying
+          ? "media-playback-pause-symbolic"
+          : "media-playback-start-symbolic",
+        () => {
+          GLib.spawn_command_line_async(
+            `dbus-send --print-reply --dest=${this._servicePath} /org/mpris/MediaPlayer2 org.mpris.MediaPlayer2.Player.PlayPause`
+          );
+
+          this._isPlaying = !this._isPlaying;
+
+          if (this._isPlaying) {
+            this._playPauseIcon.gicon = Gio.icon_new_for_string(
+              "media-playback-pause-symbolic"
+            );
+          } else {
+            this._playPauseIcon.gicon = Gio.icon_new_for_string(
+              "media-playback-start-symbolic"
+            );
+          }
+        }
+      );
       this._iconBox.add_child(playPauseButton);
 
-      this._nextIcon = new St.Icon({
-        icon_name: "media-skip-forward-symbolic",
-        icon_size: 32,
-        style_class: "icon",
-        reactive: true,
-        track_hover: true,
-      });
-      let nextButton = new St.Button({
-        child: this._nextIcon,
-        style_class: "media-control-button",
-      });
-      nextButton.connect("clicked", () => {
-        GLib.spawn_command_line_async(
-          `dbus-send --print-reply --dest=${this._servicePath} /org/mpris/MediaPlayer2 org.mpris.MediaPlayer2.Player.Next`
-        );
-      });
+      const nextButton = this._buildIconButton(
+        "media-skip-forward-symbolic",
+        () => {
+          GLib.spawn_command_line_async(
+            `dbus-send --print-reply --dest=${this._servicePath} /org/mpris/MediaPlayer2 org.mpris.MediaPlayer2.Player.Next`
+          );
+        }
+      );
       this._iconBox.add_child(nextButton);
 
-      this._iconBox.set_height(this._playPauseIcon.get_height() + 50);
+      this._iconBox.set_height(playPauseButton.get_height() + 50);
+      this.menu.box.add(this._iconBox);
+    }
 
-      this.menu.box.style_class = "media-control-box";
+    _buildMiniPlayer() {
+      this._buildAlbumArtBox();
+      this._buildMediaControlBox();
+
+      this.menu.box.style_class = "mini-player-box";
       this.menu.box.set_width(
         this._label.get_width() < 180 ? 200 : this._label.get_width() + 20
       );
@@ -212,9 +207,6 @@ const Indicator = GObject.registerClass(
       this.menu.box.x_align = St.Align.START;
       this.menu.box.y_expand = true;
       this.menu.box.vertical = true;
-
-      this.menu.box.add(this._albumArtBox);
-      this.menu.box.add(this._iconBox);
     }
 
     _updateSong() {
