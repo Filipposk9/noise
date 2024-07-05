@@ -47,18 +47,30 @@ const Indicator = GObject.registerClass(
     _init() {
       super._init(1.0, "Noise", false);
 
-      let [success, out, err, status] = GLib.spawn_command_line_sync(
-        `dbus-send --print-reply --dest=${this._servicePath} /org/mpris/MediaPlayer2 org.freedesktop.DBus.Properties.Get string:org.mpris.MediaPlayer2.Player string:PlaybackStatus`
+      let [suc, outp, error, stat] = GLib.spawn_command_line_sync(
+        "dbus-send --session --dest=org.freedesktop.DBus --type=method_call --print-reply /org/freedesktop/DBus org.freedesktop.DBus.ListNames"
       );
 
-      let output = out.toString();
+      let outpStr = outp.toString();
 
-      let playerState = output.match("/Playing/");
+      const players = outpStr.match(/org\.mpris\.MediaPlayer2\.\w+/g);
 
-      if (playerState === "Playing") {
-        this._isPlaying = true;
-      } else {
-        this._isPlaying = false;
+      if (players) {
+        this._servicePath = players[0];
+
+        let [success, out, err, status] = GLib.spawn_command_line_sync(
+          `dbus-send --print-reply --dest=${this._servicePath} /org/mpris/MediaPlayer2 org.freedesktop.DBus.Properties.Get string:org.mpris.MediaPlayer2.Player string:PlaybackStatus`
+        );
+
+        let output = out.toString();
+
+        let playerState = output.match("/Playing/");
+
+        if (playerState === "Playing") {
+          this._isPlaying = true;
+        } else {
+          this._isPlaying = false;
+        }
       }
 
       this._label = new St.Label({
@@ -132,20 +144,6 @@ const Indicator = GObject.registerClass(
 
       this._iconBox.add_child(previousButton);
 
-      // let [success, out, err, status] = GLib.spawn_command_line_sync(
-      //   `dbus-send --print-reply --dest=${this._servicePath} /org/mpris/MediaPlayer2 org.freedesktop.DBus.Properties.Get string:org.mpris.MediaPlayer2.Player string:PlaybackStatus`
-      // );
-
-      // let output = out.toString();
-
-      // let playerState = output.match("/Playing/");
-
-      // if (playerState === "Playing") {
-      //   this._isPlaying = true;
-      // } else {
-      //   this._isPlaying = false;
-      // }
-
       this._playPauseIcon = new St.Icon({
         icon_name: this._isPlaying
           ? "media-playback-pause-symbolic"
@@ -212,8 +210,6 @@ const Indicator = GObject.registerClass(
     }
 
     _updateSong() {
-      //TODO: make it work for all players
-
       let [suc, outp, error, stat] = GLib.spawn_command_line_sync(
         "dbus-send --session --dest=org.freedesktop.DBus --type=method_call --print-reply /org/freedesktop/DBus org.freedesktop.DBus.ListNames"
       );
@@ -222,47 +218,45 @@ const Indicator = GObject.registerClass(
 
       const players = outpStr.match(/org\.mpris\.MediaPlayer2\.\w+/g);
 
-      this._servicePath = players[0];
+      if (players) {
+        this._servicePath = players[0];
 
-      let [success, out, err, status] = GLib.spawn_command_line_sync(
-        `dbus-send --print-reply --dest=${this._servicePath} /org/mpris/MediaPlayer2 org.freedesktop.DBus.Properties.Get string:org.mpris.MediaPlayer2.Player string:Metadata`
-      );
+        let [success, out, err, status] = GLib.spawn_command_line_sync(
+          `dbus-send --print-reply --dest=${this._servicePath} /org/mpris/MediaPlayer2 org.freedesktop.DBus.Properties.Get string:org.mpris.MediaPlayer2.Player string:Metadata`
+        );
 
-      if (!success) {
-        // this._label.text = _("Err1");
-      }
-
-      let output = out.toString();
-
-      let artistMatch = output.match(
-        /string\s+"xesam:artist"\s+variant\s+array\s+\[\s*string\s+"([^"]+)"/
-      );
-      let titleMatch = output.match(
-        /string\s+"xesam:title"\s+variant\s+string\s+"([^"]+)"/
-      );
-
-      let albumArtMatch = output.match(
-        /string\s+"mpris:artUrl"\s+variant\s+string\s+"(https[^"]+)"/
-      );
-
-      // let [a, b, c, d] = GLib.spawn_command_line_sync(
-      //   `dbus-send --print-reply --dest=${this._servicePath} /org/mpris/MediaPlayer2 org.freedesktop.DBus.Properties.Get string:org.mpris.MediaPlayer2.Player string:PlaybackStatus`
-      // );
-
-      // let bStr = b.toString();
-
-      // let bMatch = bStr.match(/"Playing"/);
-
-      if (artistMatch && titleMatch && albumArtMatch) {
-        let artist = artistMatch[1];
-        let title = titleMatch[1];
-        this._label.text = _(`${artist} - ${title}`);
-
-        if (this._albumArtIcon !== undefined) {
-          this._albumArtIcon.gicon = Gio.icon_new_for_string(albumArtMatch[1]);
+        if (!success) {
+          // this._label.text = _("Err1");
         }
 
-        this._isPlaying = true;
+        let output = out.toString();
+
+        let artistMatch = output.match(
+          /string\s+"xesam:artist"\s+variant\s+array\s+\[\s*string\s+"([^"]+)"/
+        );
+        let titleMatch = output.match(
+          /string\s+"xesam:title"\s+variant\s+string\s+"([^"]+)"/
+        );
+
+        let albumArtMatch = output.match(
+          /string\s+"mpris:artUrl"\s+variant\s+string\s+"(https[^"]+)"/
+        );
+
+        if (artistMatch && titleMatch && albumArtMatch) {
+          let artist = artistMatch[1];
+          let title = titleMatch[1];
+          this._label.text = _(`${artist} - ${title}`);
+
+          if (this._albumArtIcon !== undefined) {
+            this._albumArtIcon.gicon = Gio.icon_new_for_string(
+              albumArtMatch[1]
+            );
+          }
+
+          this._isPlaying = true;
+        } else {
+          this._label.text = _("Noise");
+        }
       } else {
         this._label.text = _("Noise");
       }
