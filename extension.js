@@ -33,44 +33,25 @@ const GLib = imports.gi.GLib;
 const Lang = imports.lang;
 const Clutter = imports.gi.Clutter;
 
-//TODO: dont take space when player is closed
+//TODO: open your favorite player onClick
 //TODO: add settings to show/hide all the above & position elements
 //TODO: switch to typescript
 
-//TODO: media controls, make separate line with container so hover becomes a bigger circle
-
 const Indicator = GObject.registerClass(
   class Indicator extends PanelMenu.Button {
+    _players = [];
     _isPlaying = false;
     _servicePath = "";
 
     _init() {
       super._init(1.0, "Noise", false);
 
-      let [suc, outp, error, stat] = GLib.spawn_command_line_sync(
-        "dbus-send --session --dest=org.freedesktop.DBus --type=method_call --print-reply /org/freedesktop/DBus org.freedesktop.DBus.ListNames"
-      );
+      //TODO: Step1 Get user configuration
 
-      let outpStr = outp.toString();
+      this._players = this._getMPRISPlayers();
 
-      const players = outpStr.match(/org\.mpris\.MediaPlayer2\.\w+/g);
-
-      if (players) {
-        this._servicePath = players[0];
-
-        let [success, out, err, status] = GLib.spawn_command_line_sync(
-          `dbus-send --print-reply --dest=${this._servicePath} /org/mpris/MediaPlayer2 org.freedesktop.DBus.Properties.Get string:org.mpris.MediaPlayer2.Player string:PlaybackStatus`
-        );
-
-        let output = out.toString();
-
-        let playerState = output.match("/Playing/");
-
-        if (playerState === "Playing") {
-          this._isPlaying = true;
-        } else {
-          this._isPlaying = false;
-        }
+      if (this._players && this._players.length > 0) {
+        this._isPlaying = this._getPlayerState();
       }
 
       this._label = new St.Label({
@@ -82,13 +63,40 @@ const Indicator = GObject.registerClass(
 
       this.add_child(this._label);
 
-      // if (Main.panel._menus === undefined)
-      //   Main.panel.menuManager.addMenu(this.menu);
-      // else Main.panel._menus.addMenu(this.menu);
-
       this._createIconBox();
-
       this._updateSong();
+    }
+
+    _getMPRISPlayers() {
+      let [suc, outp, error, stat] = GLib.spawn_command_line_sync(
+        "dbus-send --session --dest=org.freedesktop.DBus --type=method_call --print-reply /org/freedesktop/DBus org.freedesktop.DBus.ListNames"
+      );
+
+      if (suc) {
+        return outp.toString().match(/org\.mpris\.MediaPlayer2\.\w+/g);
+      }
+
+      return null;
+    }
+
+    _getPlayerState() {
+      if (this._players && this._players.length > 0) {
+        this._servicePath = this._players[0];
+      }
+
+      let [success, out, err, status] = GLib.spawn_command_line_sync(
+        `dbus-send --print-reply --dest=${this._servicePath} /org/mpris/MediaPlayer2 org.freedesktop.DBus.Properties.Get string:org.mpris.MediaPlayer2.Player string:PlaybackStatus`
+      );
+
+      let output = out.toString();
+
+      let playerState = output.match("/Playing/");
+
+      if (playerState === "Playing") {
+        return true;
+      } else {
+        return false;
+      }
     }
 
     _createIconBox() {
@@ -256,9 +264,11 @@ const Indicator = GObject.registerClass(
           this._isPlaying = true;
         } else {
           this._label.text = _("Noise");
+          this._albumArtIcon.gicon = Gio.icon_new_for_string("");
         }
       } else {
         this._label.text = _("Noise");
+        this._albumArtIcon.icon = Gio.icon_new_for_string("");
       }
 
       this.menu.box.set_width(
