@@ -18,8 +18,7 @@
 
 /* exported init */
 
-// const GETTEXT_DOMAIN = "Noise";
-const GETTEXT_DOMAIN = imports.gettext.domain(Me.metadata["gettext-domain"]);
+const GETTEXT_DOMAIN = "Noise";
 
 const { GObject, St, Gio } = imports.gi;
 
@@ -36,20 +35,34 @@ const Clutter = imports.gi.Clutter;
 
 //TODO: dont take space when player is closed
 //TODO: add settings to show/hide all the above & position elements
-//TODO: detect multiple open players
 //TODO: switch to typescript
+
+//TODO: media controls, make separate line with container so hover becomes a bigger circle
 
 const Indicator = GObject.registerClass(
   class Indicator extends PanelMenu.Button {
     _isPlaying = false;
     _servicePath = "";
-    _objectPath = "";
 
     _init() {
       super._init(1.0, "Noise", false);
 
+      let [success, out, err, status] = GLib.spawn_command_line_sync(
+        `dbus-send --print-reply --dest=${this._servicePath} /org/mpris/MediaPlayer2 org.freedesktop.DBus.Properties.Get string:org.mpris.MediaPlayer2.Player string:PlaybackStatus`
+      );
+
+      let output = out.toString();
+
+      let playerState = output.match("/Playing/");
+
+      if (playerState === "Playing") {
+        this._isPlaying = true;
+      } else {
+        this._isPlaying = false;
+      }
+
       this._label = new St.Label({
-        text: _("Now Playing"),
+        text: _("Noise"),
         x_align: Clutter.ActorAlign.START,
         y_align: Clutter.ActorAlign.CENTER,
         y_expand: true,
@@ -96,6 +109,8 @@ const Indicator = GObject.registerClass(
         icon_name: "media-skip-backward-symbolic",
         icon_size: 32,
         style_class: "icon",
+        reactive: true,
+        track_hover: true,
       });
       let previousButton = new St.Button({
         child: this._previousIcon,
@@ -103,20 +118,33 @@ const Indicator = GObject.registerClass(
       });
       previousButton.connect("clicked", () => {
         GLib.spawn_command_line_async(
-          "dbus-send --print-reply --dest=org.mpris.MediaPlayer2.cider /org/mpris/MediaPlayer2 org.mpris.MediaPlayer2.Player.Previous"
+          `dbus-send --print-reply --dest=${this._servicePath} /org/mpris/MediaPlayer2 org.mpris.MediaPlayer2.Player.Previous`
         );
       });
+
+      this._previousIconBox = new St.BoxLayout({
+        style_class: "icon-box",
+        x_expand: true,
+        y_expand: true,
+        reactive: true,
+        track_hover: true,
+      });
+
       this._iconBox.add_child(previousButton);
 
-      //detect if currently playing
+      // let [success, out, err, status] = GLib.spawn_command_line_sync(
+      //   `dbus-send --print-reply --dest=${this._servicePath} /org/mpris/MediaPlayer2 org.freedesktop.DBus.Properties.Get string:org.mpris.MediaPlayer2.Player string:PlaybackStatus`
+      // );
 
-      let [success, out, err, status] = GLib.spawn_command_line_sync(
-        "dbus-send --print-reply --dest=org.mpris.MediaPlayer2.cider /org/mpris/MediaPlayer2 org.freedesktop.DBus.Properties.Get string:org.mpris.MediaPlayer2.Player string:PlaybackStatus"
-      );
+      // let output = out.toString();
 
-      let output = out.toString();
+      // let playerState = output.match("/Playing/");
 
-      this._isPlaying = output.match(/"Playing"/);
+      // if (playerState === "Playing") {
+      //   this._isPlaying = true;
+      // } else {
+      //   this._isPlaying = false;
+      // }
 
       this._playPauseIcon = new St.Icon({
         icon_name: this._isPlaying
@@ -124,6 +152,8 @@ const Indicator = GObject.registerClass(
           : "media-playback-start-symbolic",
         icon_size: 32,
         style_class: "icon",
+        reactive: true,
+        track_hover: true,
       });
       let playPauseButton = new St.Button({
         child: this._playPauseIcon,
@@ -131,7 +161,7 @@ const Indicator = GObject.registerClass(
       });
       playPauseButton.connect("clicked", () => {
         GLib.spawn_command_line_async(
-          "dbus-send --print-reply --dest=org.mpris.MediaPlayer2.cider /org/mpris/MediaPlayer2 org.mpris.MediaPlayer2.Player.PlayPause"
+          `dbus-send --print-reply --dest=${this._servicePath} /org/mpris/MediaPlayer2 org.mpris.MediaPlayer2.Player.PlayPause`
         );
 
         this._isPlaying = !this._isPlaying;
@@ -152,6 +182,8 @@ const Indicator = GObject.registerClass(
         icon_name: "media-skip-forward-symbolic",
         icon_size: 32,
         style_class: "icon",
+        reactive: true,
+        track_hover: true,
       });
       let nextButton = new St.Button({
         child: this._nextIcon,
@@ -159,10 +191,12 @@ const Indicator = GObject.registerClass(
       });
       nextButton.connect("clicked", () => {
         GLib.spawn_command_line_async(
-          "dbus-send --print-reply --dest=org.mpris.MediaPlayer2.cider /org/mpris/MediaPlayer2 org.mpris.MediaPlayer2.Player.Next"
+          `dbus-send --print-reply --dest=${this._servicePath} /org/mpris/MediaPlayer2 org.mpris.MediaPlayer2.Player.Next`
         );
       });
       this._iconBox.add_child(nextButton);
+
+      this._iconBox.set_height(this._playPauseIcon.get_height() + 50);
 
       this.menu.box.style_class = "media-control-box";
       this.menu.box.set_width(
@@ -180,8 +214,18 @@ const Indicator = GObject.registerClass(
     _updateSong() {
       //TODO: make it work for all players
 
+      let [suc, outp, error, stat] = GLib.spawn_command_line_sync(
+        "dbus-send --session --dest=org.freedesktop.DBus --type=method_call --print-reply /org/freedesktop/DBus org.freedesktop.DBus.ListNames"
+      );
+
+      let outpStr = outp.toString();
+
+      const players = outpStr.match(/org\.mpris\.MediaPlayer2\.\w+/g);
+
+      this._servicePath = players[0];
+
       let [success, out, err, status] = GLib.spawn_command_line_sync(
-        "dbus-send --print-reply --dest=org.mpris.MediaPlayer2.cider /org/mpris/MediaPlayer2 org.freedesktop.DBus.Properties.Get string:org.mpris.MediaPlayer2.Player string:Metadata"
+        `dbus-send --print-reply --dest=${this._servicePath} /org/mpris/MediaPlayer2 org.freedesktop.DBus.Properties.Get string:org.mpris.MediaPlayer2.Player string:Metadata`
       );
 
       if (!success) {
@@ -201,6 +245,14 @@ const Indicator = GObject.registerClass(
         /string\s+"mpris:artUrl"\s+variant\s+string\s+"(https[^"]+)"/
       );
 
+      // let [a, b, c, d] = GLib.spawn_command_line_sync(
+      //   `dbus-send --print-reply --dest=${this._servicePath} /org/mpris/MediaPlayer2 org.freedesktop.DBus.Properties.Get string:org.mpris.MediaPlayer2.Player string:PlaybackStatus`
+      // );
+
+      // let bStr = b.toString();
+
+      // let bMatch = bStr.match(/"Playing"/);
+
       if (artistMatch && titleMatch && albumArtMatch) {
         let artist = artistMatch[1];
         let title = titleMatch[1];
@@ -212,7 +264,7 @@ const Indicator = GObject.registerClass(
 
         this._isPlaying = true;
       } else {
-        this._label.text = _("Now Playing");
+        this._label.text = _("Noise");
       }
 
       this.menu.box.set_width(
