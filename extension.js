@@ -35,7 +35,7 @@ const Clutter = imports.gi.Clutter;
 
 //TODO: open your favorite player onClick
 //TODO: add settings to show/hide all the above & position elements
-//TODO: switch to typescript
+//TODO: add visualizer
 
 const Indicator = GObject.registerClass(
   class Indicator extends PanelMenu.Button {
@@ -68,12 +68,12 @@ const Indicator = GObject.registerClass(
     }
 
     _getMPRISPlayers() {
-      let [suc, outp, error, stat] = GLib.spawn_command_line_sync(
+      const [success, output, error, status] = GLib.spawn_command_line_sync(
         "dbus-send --session --dest=org.freedesktop.DBus --type=method_call --print-reply /org/freedesktop/DBus org.freedesktop.DBus.ListNames"
       );
 
-      if (suc) {
-        return outp.toString().match(/org\.mpris\.MediaPlayer2\.\w+/g);
+      if (success) {
+        return output.toString().match(/org\.mpris\.MediaPlayer2\.\w+/g);
       }
 
       return null;
@@ -84,16 +84,16 @@ const Indicator = GObject.registerClass(
         this._servicePath = this._players[0];
       }
 
-      let [success, out, err, status] = GLib.spawn_command_line_sync(
+      const [success, output, error, status] = GLib.spawn_command_line_sync(
         `dbus-send --print-reply --dest=${this._servicePath} /org/mpris/MediaPlayer2 org.freedesktop.DBus.Properties.Get string:org.mpris.MediaPlayer2.Player string:PlaybackStatus`
       );
 
-      let output = out.toString();
+      if (success) {
+        const playerState = output.toString().match("/Playing/");
 
-      let playerState = output.match("/Playing/");
-
-      if (playerState === "Playing") {
-        return true;
+        if (playerState === "Playing") {
+          return true;
+        }
       }
 
       return false;
@@ -101,7 +101,7 @@ const Indicator = GObject.registerClass(
 
     _buildAlbumArtBox() {
       this._albumArtBox = new St.BoxLayout({
-        style_class: "album-art-boxlayout",
+        style_class: "album-art-box",
         x_expand: true,
         y_expand: true,
         x_align: Clutter.ActorAlign.CENTER,
@@ -119,26 +119,78 @@ const Indicator = GObject.registerClass(
       this.menu.box.add(this._albumArtBox);
     }
 
-    _buildIconButton(iconName, action) {
-      const icon = new St.Icon({
-        icon_name: iconName,
+    _buildMediaControlBox() {
+      this._previousIcon = new St.Icon({
+        icon_name: "media-skip-backward-symbolic",
         icon_size: 32,
         style_class: "icon",
         reactive: true,
         track_hover: true,
       });
 
-      const button = new St.Button({
-        child: icon,
+      this._previousButton = new St.Button({
+        child: this._previousIcon,
         style_class: "media-control-button",
       });
 
-      button.connect("clicked", action);
+      this._previousButton.connect("clicked", () => {
+        GLib.spawn_command_line_async(
+          `dbus-send --print-reply --dest=${this._servicePath} /org/mpris/MediaPlayer2 org.mpris.MediaPlayer2.Player.Previous`
+        );
+      });
 
-      return button;
-    }
+      this._playPauseIcon = new St.Icon({
+        icon_name: this._isPlaying
+          ? "media-playback-pause-symbolic"
+          : "media-playback-start-symbolic",
+        icon_size: 32,
+        style_class: "icon",
+        reactive: true,
+        track_hover: true,
+      });
 
-    _buildMediaControlBox() {
+      this._playPauseButton = new St.Button({
+        child: this._playPauseIcon,
+        style_class: "media-control-button",
+      });
+
+      this._playPauseButton.connect("clicked", () => {
+        GLib.spawn_command_line_async(
+          `dbus-send --print-reply --dest=${this._servicePath} /org/mpris/MediaPlayer2 org.mpris.MediaPlayer2.Player.PlayPause`
+        );
+
+        this._isPlaying = !this._isPlaying;
+
+        if (this._isPlaying) {
+          this._playPauseIcon.gicon = Gio.icon_new_for_string(
+            "media-playback-pause-symbolic"
+          );
+        } else {
+          this._playPauseIcon.gicon = Gio.icon_new_for_string(
+            "media-playback-start-symbolic"
+          );
+        }
+      });
+
+      this._nextIcon = new St.Icon({
+        icon_name: "media-skip-forward-symbolic",
+        icon_size: 32,
+        style_class: "icon",
+        reactive: true,
+        track_hover: true,
+      });
+
+      this._nextButton = new St.Button({
+        child: this._nextIcon,
+        style_class: "media-control-button",
+      });
+
+      this._nextButton.connect("clicked", () => {
+        GLib.spawn_command_line_async(
+          `dbus-send --print-reply --dest=${this._servicePath} /org/mpris/MediaPlayer2 org.mpris.MediaPlayer2.Player.Next`
+        );
+      });
+
       this._iconBox = new St.BoxLayout({
         style_class: "media-control-box",
         x_expand: true,
@@ -147,51 +199,11 @@ const Indicator = GObject.registerClass(
         y_align: Clutter.ActorAlign.END,
       });
 
-      const previousButton = this._buildIconButton(
-        "media-skip-backward-symbolic",
-        () => {
-          GLib.spawn_command_line_async(
-            `dbus-send --print-reply --dest=${this._servicePath} /org/mpris/MediaPlayer2 org.mpris.MediaPlayer2.Player.Previous`
-          );
-        }
-      );
-      this._iconBox.add_child(previousButton);
+      this._iconBox.add_child(this._previousButton);
+      this._iconBox.add_child(this._playPauseButton);
+      this._iconBox.add_child(this._nextButton);
 
-      const playPauseButton = this._buildIconButton(
-        this._isPlaying
-          ? "media-playback-pause-symbolic"
-          : "media-playback-start-symbolic",
-        () => {
-          GLib.spawn_command_line_async(
-            `dbus-send --print-reply --dest=${this._servicePath} /org/mpris/MediaPlayer2 org.mpris.MediaPlayer2.Player.PlayPause`
-          );
-
-          this._isPlaying = !this._isPlaying;
-
-          if (this._isPlaying) {
-            this._playPauseIcon.gicon = Gio.icon_new_for_string(
-              "media-playback-pause-symbolic"
-            );
-          } else {
-            this._playPauseIcon.gicon = Gio.icon_new_for_string(
-              "media-playback-start-symbolic"
-            );
-          }
-        }
-      );
-      this._iconBox.add_child(playPauseButton);
-
-      const nextButton = this._buildIconButton(
-        "media-skip-forward-symbolic",
-        () => {
-          GLib.spawn_command_line_async(
-            `dbus-send --print-reply --dest=${this._servicePath} /org/mpris/MediaPlayer2 org.mpris.MediaPlayer2.Player.Next`
-          );
-        }
-      );
-      this._iconBox.add_child(nextButton);
-
-      this._iconBox.set_height(playPauseButton.get_height() + 50);
+      this._iconBox.set_height(this._iconBox.get_height() + 50);
       this.menu.box.add(this._iconBox);
     }
 
