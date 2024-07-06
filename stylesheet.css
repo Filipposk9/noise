@@ -1,15 +1,15 @@
-.album-art-boxlayout {
+.mini-player-box {
+  background-color: rgba(0, 0, 0, 0.6);
+  border-radius: 16px;
+}
+
+.album-art-box {
   padding-top: 20px;
   padding-left: 12px;
   padding-right: 12px;
   padding-bottom: 20px;
   height: 180px;
   width: 180px;
-}
-
-.mini-player-box {
-  background-color: rgba(0, 0, 0, 0.6);
-  border-radius: 16px;
 }
 
 .media-control-box {
