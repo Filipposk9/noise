@@ -89,9 +89,9 @@ const Indicator = GObject.registerClass(
       );
 
       if (success) {
-        const playerState = output.toString().match("/Playing/");
+        const playerState = output.toString().match("Playing");
 
-        if (playerState === "Playing") {
+        if (playerState[0] === "Playing") {
           return true;
         }
       }
@@ -264,8 +264,6 @@ const Indicator = GObject.registerClass(
               albumArtMatch[1]
             );
           }
-
-          this._isPlaying = true;
         } else {
           this._label.text = _("Noise");
           this._albumArtIcon.gicon = Gio.icon_new_for_string("");
