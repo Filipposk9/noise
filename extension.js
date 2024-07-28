@@ -20,7 +20,7 @@
 
 const GETTEXT_DOMAIN = "Noise";
 
-const { GObject, St, Gio } = imports.gi;
+const { GObject, St, Gio, Gtk } = imports.gi;
 
 const ExtensionUtils = imports.misc.extensionUtils;
 const Main = imports.ui.main;
@@ -33,20 +33,29 @@ const GLib = imports.gi.GLib;
 const Lang = imports.lang;
 const Clutter = imports.gi.Clutter;
 
+const Me = ExtensionUtils.getCurrentExtension();
+
 //TODO: open your favorite player onClick
 //TODO: add settings to show/hide all the above & position elements
 //TODO: add visualizer
+//TODO: make placeholder album art for when no song is playing
+let lightThemeCss = Me.dir.get_child("light-theme.css").get_path();
+let darkThemeCss = Me.dir.get_child("stylesheet.css").get_path();
 
 const Indicator = GObject.registerClass(
   class Indicator extends PanelMenu.Button {
     _players = [];
-    _isPlaying = false;
+    _isPlaying = true;
     _servicePath = "";
 
     _init() {
       super._init(1.0, "Noise", false);
 
       //TODO: Step1 Get user configuration
+
+      this._settings = new Gio.Settings({
+        schema: "org.gnome.desktop.interface",
+      });
 
       this._players = this._getMPRISPlayers();
 
@@ -91,7 +100,7 @@ const Indicator = GObject.registerClass(
       if (success) {
         const playerState = output.toString().match("Playing");
 
-        if (playerState[0] === "Playing") {
+        if (playerState && playerState[0] === "Playing") {
           return true;
         }
       }
@@ -211,9 +220,17 @@ const Indicator = GObject.registerClass(
       this._buildAlbumArtBox();
       this._buildMediaControlBox();
 
-      this.menu.box.style_class = "mini-player-box";
+      let currentTheme = this._settings.get_string("gtk-theme");
+      let isDarkTheme = currentTheme.toLowerCase().includes("dark");
+
+      if (isDarkTheme) {
+        this.menu.box.style_class = "mini-player-box";
+      } else {
+        this.menu.box.style_class = "mini-player-box-light";
+      }
+
       this.menu.box.set_width(
-        this._label.get_width() < 180 ? 200 : this._label.get_width() + 20
+        this._label.get_width() < 180 ? 210 : this._label.get_width() + 30
       );
       this.menu.box.x_expand = true;
       this.menu.box.x_align = St.Align.START;
@@ -222,6 +239,8 @@ const Indicator = GObject.registerClass(
     }
 
     _updateSong() {
+      //TODO: ask to show playerState
+
       let [suc, outp, error, stat] = GLib.spawn_command_line_sync(
         "dbus-send --session --dest=org.freedesktop.DBus --type=method_call --print-reply /org/freedesktop/DBus org.freedesktop.DBus.ListNames"
       );
@@ -274,7 +293,7 @@ const Indicator = GObject.registerClass(
       }
 
       this.menu.box.set_width(
-        this._label.get_width() < 180 ? 200 : this._label.get_width() + 20
+        this._label.get_width() < 180 ? 210 : this._label.get_width() + 30
       );
 
       GLib.timeout_add_seconds(
